@@ -1,8 +1,1 @@
-# PyPi publishing tools
-setuptools
-wheel
-twine
-pytest
-pyinstaller
-build
-toml
+networkx

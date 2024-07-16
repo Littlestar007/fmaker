@@ -5,12 +5,12 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "python-package-template-mldxo"
+name = "cfmaker"
 version = "0.1.0"
 authors = [
-  { name="mldxo", email="miloszmaculewicz@gmail.com" },
+  { name="littlestar", email="littlestar002@gmail.com" },
 ]
-description = "Python Package Template Description"
+description = "A lightweight compilation tool for Fortran and C projects, primarily targeting the Intel oneAPI compilers, ifort and ifx."
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
@@ -18,13 +18,11 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-
-[project.scripts]
-python-package-template = "python_package_template:main"
+keywords = ["oneapi", "fortran", "project", "c", "compiler"]
 
 [project.urls]
-Homepage = "https://github.com/mldxo/python-package-template"
-Issues = "https://github.com/mldxo/python-package-template/issues"
+Homepage = "https://github.com/Littlestar007/fmaker"
+Issues = "https://github.com/Littlestar007/fmaker/issues"
 
 [tool.setuptools.packages.find]
 where = [""]
