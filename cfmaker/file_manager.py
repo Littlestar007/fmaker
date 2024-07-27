@@ -145,6 +145,11 @@ class source_manager:
       self.save_to_file()
     return sorted_files
   
+  def f_get_objs(self):
+    sorted_files = list(nx.topological_sort(self.dependency_graph))[::-1] 
+    sorted_objs = [self.source_files[f][self.obj_attr] for f in sorted_files]
+    return sorted_objs
+  
   def c_get_files_need_compile(self):
     '''获取c中被修改的源文件列表,c编译不需要排序'''
     cmp_files = set()

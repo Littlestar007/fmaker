@@ -124,29 +124,41 @@ class ProjectConfig:
     '''内置c选项'''
     self.c_flag_include = inner_flag_opt('-I', '', ispath=True, isList=True)
     self.c_flag_nolink = inner_flag_opt('-c')
-    self.c_flag_obj = inner_flag_opt('-Fo', '', ispath=True, isList=False)
-    self.c_flag_exe = inner_flag_opt('-Fe', '', ispath=True, isList=False)
+    self.c_flag_obj = inner_flag_opt('-o', ' ', ispath=True, isList=False)
+    self.c_flag_exe = inner_flag_opt('-o', ' ', ispath=True, isList=False)    
     
     if os.name == 'nt':
       self.lib_flag = inner_flag_opt('/OUT', ':', ispath=True, isList=False)
       self.link_flag_use = inner_flag_opt('/link')
       self.link_flag_lib_dir = inner_flag_opt('/libpath', ':', ispath=True, isList=True)
+      self.c_flag_silent = inner_flag_opt('/nologo')
     else:
       self.lib_flag = inner_flag_opt('-crs', ' ', ispath=True, isList=False)
       self.link_flag_use = inner_flag_opt('')
       self.link_flag_lib_dir = inner_flag_opt('-L', '', ispath=True, isList=True)
+      self.c_flag_silent = inner_flag_opt('')
 
   def auto_set_fc_options(self, version: str = '2024.2'):
     '''自动设置fortran编译选项，可能不对，目前只对2024.2，2023.2，2017三个版本正确'''
     if version == '2024.2':
-      self.fc_options_debug = '-debug-parameters:all -Od -check:all -traceback -Qmkl:parallel -real-size:64 -fpp'
-      self.fc_options_release = '-O3 -Qmkl:parallel -real-size:64 -fpp'
-      self.f_flag_include = inner_flag_opt('-I', '', ispath=True, isList=True)
-      self.f_flag_mod_path = inner_flag_opt('-module', ':', ispath=True, isList=False)
-      self.f_flag_nolink = inner_flag_opt('-c')
-      self.f_flag_silent = inner_flag_opt('-nologo')
-      self.f_flag_obj = inner_flag_opt('-object', ':', ispath=True, isList=False)
-      self.f_flag_exe = inner_flag_opt('-exe', ':', ispath=True, isList=False)
+      if os.name == 'nt':
+        self.fc_options_debug = '/debug:full /Od /check:all /traceback /Qmkl:parallel /real-size:64 /fpp /Qm64'
+        self.fc_options_release = '-O3 -Qmkl:parallel -real-size:64 -fpp'
+        self.f_flag_include = inner_flag_opt('-I', '', ispath=True, isList=True)
+        self.f_flag_mod_path = inner_flag_opt('-module', ':', ispath=True, isList=False)
+        self.f_flag_nolink = inner_flag_opt('-c')
+        self.f_flag_silent = inner_flag_opt('-nologo')
+        self.f_flag_obj = inner_flag_opt('-object', ':', ispath=True, isList=False)
+        self.f_flag_exe = inner_flag_opt('-exe', ':', ispath=True, isList=False)
+      else:
+        self.fc_options_debug = '-g -O0 -fpp -check all -traceback -warn interfaces -r8 -qmkl=parallel -standard-semantics -m64'
+        self.fc_options_release = '-O3 -fpp -r8 -qmkl=parallel -standard-semantics -m64'
+        self.f_flag_include = inner_flag_opt('-I', '', ispath=True, isList=True)
+        self.f_flag_mod_path = inner_flag_opt('-module', ' ', ispath=True, isList=False)
+        self.f_flag_nolink = inner_flag_opt('-c')
+        self.f_flag_silent = inner_flag_opt('-nologo')
+        self.f_flag_obj = inner_flag_opt('-Fo', '', ispath=True, isList=False)
+        self.f_flag_exe = inner_flag_opt('-o', ' ', ispath=True, isList=False)
     elif version == '2023.2':
       self.fc_options_debug = '-g -D__debug__ -fpp -check all -traceback -warn interfaces -r8 -qmkl=parallel -standard-semantics -m64'
       self.fc_options_release = '-fpp -r8 -qmkl=parallel -standard-semantics -m64'
@@ -169,13 +181,16 @@ class ProjectConfig:
   def auto_set_cc_options(self, version: str = '2024.2'):
     '''自动设置c编译选项，可能不对，只对2024.2，2023.2，2017三个版本正确'''
     if version == '2024.2':
-      self.cc_options_debug = '-Zi -debug:full -Od'
+      if os.name == 'nt':
+        self.cc_options_debug = '-Zi -debug:full -Od'
+      else:
+        self.cc_options_debug = '-g -debug=full -O0'
       self.cc_options_release = '-O3'
     elif version == '2023.2':
-      self.cc_options_debug = '-g -debug=full -Rno-debug-disables-optimization'
+      self.cc_options_debug = '-g -debug=full -O0'
       self.cc_options_release = ''
     else:
-      self.cc_options_debug = '-g -debug=full -Rno-debug-disables-optimization'
+      self.cc_options_debug = '-g -debug=full -O0'
       self.cc_options_release = ''
       
   def get_oneapi_home(self):
@@ -213,13 +228,13 @@ class ProjectConfig:
       print('没有找到intel编译器根目录，如要自动添加mpi，请先指定根目录')
       print('温馨提示：使用mpiifort或mpiifx时不需要添加mpi路径')
       return
-    lib_dirs, include_dirs, lib_path = find_oneapi_mpi_by_home(Path(self.oneapi_home))
+    lib_dirs, include_dirs, lib_paths = find_oneapi_mpi_by_home(Path(self.oneapi_home))
     if len(lib_dirs) == 0 or len(include_dirs) == 0:
       print('没有找到mpi路径，如用到mpi请手动填写include和lib路径，或者编译器使用mpiifort或mpiifx')
       return
     self.lib_dirs = merge_path_dirs(self.lib_dirs, lib_dirs)
     self.include_dirs = merge_path_dirs(self.include_dirs, include_dirs)
-    self.static_libraries = merge_path_dirs(self.static_libraries, [lib_path])
+    self.static_libraries = merge_path_dirs(self.static_libraries, lib_paths)
 
   def auto_add_intel_mkl(self):
     '''自动添加mkl路径'''

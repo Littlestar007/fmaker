@@ -65,19 +65,21 @@ def find_file(root_path, target_file):
 def find_oneapi_mpi_by_home(oneapi_path: Path):
   lib_dirs = []
   include_dirs = []
-  lib_path = None
+  lib_paths = []
   #找到mpi路径
   mpi_path = find_folder(oneapi_path, 'mpi')
   if mpi_path is None:
     return None
   lib_folder = find_folder(mpi_path, 'lib')
   if lib_folder is not None:
-    libname = 'libmpifort.a'
+    libnames = ['libmpi_ilp64.a', 'libmpifort.a', 'libmpi.a']
     if os.name == 'nt':
-      libname = 'impi.lib'
-    lib_path = find_file(lib_folder, libname)
-    if lib_path is not None:
-      lib_dirs.append(lib_path.parent)
+      libnames = ['impi.lib']
+    for lib in libnames:
+      lib_path = find_file(lib_folder, lib)
+      if lib_path is not None:
+        lib_paths.append(lib_path)
+        lib_dirs.append(lib_path.parent)
 
   include_folder = find_folder(mpi_path, 'include')
   if include_folder is not None:
@@ -90,7 +92,7 @@ def find_oneapi_mpi_by_home(oneapi_path: Path):
     if fpath is not None:
       include_dirs.append(fpath.parent)
 
-  return lib_dirs, include_dirs, lib_path
+  return lib_dirs, include_dirs, lib_paths
 
 def find_oneapi_mkl_by_home(oneapi_path: Path):
   lib_dirs = []

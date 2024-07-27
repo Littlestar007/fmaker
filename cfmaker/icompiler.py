@@ -1,11 +1,33 @@
 #coding:utf-8
 import os
+import shutil
 import subprocess
 import sys
-from typing import List, Optional
+from typing import List, Optional, Callable
 from .fconfig import ProjectConfig
 from .tools import gen_flag, is_str_not_empty, is_str_empty, merge_path_dirs
 from .file_manager import source_manager
+
+class custom_fun:
+  def __init__(self, func:Callable, do_on_change = True, call_each_change = False) -> None:
+    self.func = func
+    self.do_on_change = do_on_change
+    self.call_each_change = call_each_change
+    
+  def call_funcs(self, files):
+    if self.func is None:
+      return
+    if not callable(self.func):
+      return
+    if self.do_on_change and len(files) > 0:
+      if self.call_each_change:
+        for f in files:
+          self.func(f)
+      else:
+        self.func(files)
+    elif self.do_on_change == False:
+      self.func(files)
+        
 
 class compile_manager:
 
@@ -18,6 +40,8 @@ class compile_manager:
     self.config.project_build_dir = os.path.abspath(self.config.project_build_dir)
     
     self.need_update = 'update' in sys.argv
+    self.need_clear = 'clear' in sys.argv
+    self.with_exe = 'rmexe' in sys.argv
     
     if target_type is None:
       # 确保命令行参数的数量至少为2（脚本名和至少一个参数）
@@ -43,6 +67,7 @@ class compile_manager:
     
     if os.path.exists(self.f_file_manager):
       self.f_parser = source_manager.load_from_file(self.f_file_manager)
+      self.f_parser.obj_attr = self.obj_attr
     else:
       self.f_parser = source_manager(self.config.f_srcs, self.config.project_build_dir,
                                      self.obj_dir_d, self.obj_dir_r, self.obj_attr,
@@ -50,6 +75,7 @@ class compile_manager:
       
     if os.path.exists(self.c_file_manager):
       self.c_parser = source_manager.load_from_file(self.c_file_manager)
+      self.c_parser.obj_attr = self.obj_attr
     else:
       self.c_parser = source_manager(self.config.c_srcs, self.config.project_build_dir,
                                      self.obj_dir_d, self.obj_dir_r, self.obj_attr,
@@ -58,8 +84,9 @@ class compile_manager:
   def update_source_files(self):
     if 'f' in self.compile_ordered:
       self.f_parser.find_source_files()
+      self.f_parser.gen_dependency_graph()
       with open(self.f_obj_list_file, "w") as f:
-        object_files = [attr[self.obj_attr] for f, attr in self.f_parser.source_files.items()]
+        object_files = self.f_parser.f_get_objs()
         for obj in object_files:
             f.write(obj + "\n")
           
@@ -126,6 +153,9 @@ class compile_manager:
     self.f_lib_file = os.path.join(self.lib_dir, self.config.f_lib_name) if is_str_not_empty(self.config.f_lib_name) else ''
     self.c_exe_file = os.path.join(self.bin_dir, self.config.c_exe_name) if is_str_not_empty(self.config.c_exe_name) else ''
     self.c_lib_file = os.path.join(self.lib_dir, self.config.c_lib_name) if is_str_not_empty(self.config.c_lib_name) else ''
+    
+    self.funcs_after_c_build:List[custom_fun] = []
+    self.funcs_after_f_build:List[custom_fun] = []
 
   def check_compile_order(self):
     '''检查混合编译顺序'''
@@ -186,13 +216,14 @@ class compile_manager:
       cmd = [
           self.config.cc, 
           self.cc_options, 
+          self.config.c_flag_silent.gen_flag(),
           self.config.c_flag_include.gen_flag(self.config.include_dirs),
           self.config.c_flag_nolink.gen_flag(),
           file,
           self.config.c_flag_obj.gen_flag(obj_path)
       ]
       print(f"Compiling {os.path.basename(file)}")
-      result = subprocess.run(" ".join(cmd) + " > NUL 2>&1", shell=True)
+      result = subprocess.run(" ".join(cmd), shell=True)
       if result.returncode != 0:
         print(f"Error: Compilation of {file} failed!")
         sys.exit(result.returncode)
@@ -208,14 +239,16 @@ class compile_manager:
       return
     cmd = [
         self.config.fc,
+        self.fc_options, 
         self.config.f_flag_silent.gen_flag(),
-        gen_flag('', self.slibs, ' ', ispath=True, isList=True),
         gen_flag('@', self.f_obj_list_file, '', ispath=True, isList=False),
+        gen_flag('', self.slibs, ' ', ispath=True, isList=True),
         self.config.f_flag_exe.gen_flag(self.f_exe_file),
         self.config.link_flag_use.gen_flag(),
         self.config.link_flag_lib_dir.gen_flag(self.config.lib_dirs),
     ]
     print("Linking fortran object files...")
+    #print(" ".join(cmd))
     result = subprocess.run(" ".join(cmd), shell=True)
     if result.returncode != 0:
       print("Error: Linking failed!")
@@ -235,6 +268,7 @@ class compile_manager:
       return
     cmd = [
         self.config.cc,
+        self.config.c_flag_silent.gen_flag(),
         gen_flag('', self.slibs, ' ', ispath=True, isList=True),
         gen_flag('@', self.f_obj_list_file, '', ispath=True, isList=False),
         self.config.c_flag_exe.gen_flag(self.c_exe_file),
@@ -277,11 +311,12 @@ class compile_manager:
       return
     cmd = [
         self.config.lib_tool,
+        self.config.c_flag_silent.gen_flag(),
         self.config.lib_flag.gen_flag(self.c_lib_file), 
         gen_flag('@', self.c_obj_list_file, '', ispath=True, isList=False),
     ]
     print("正在打包lib...")
-    result = subprocess.run(" ".join(cmd) + " > NUL 2>&1", shell=True)
+    result = subprocess.run(" ".join(cmd), shell=True)
     if result.returncode != 0:
       print("Error: 打包lib失败!")
       sys.exit(result.returncode)
@@ -290,13 +325,40 @@ class compile_manager:
     
   def check_must_update_file(self):
     '''检查是否必须更新文件'''
-    if 'c' in self.compile_ordered and not os.path.isfile(self.c_file_manager):
-      return True
-    if 'f' in self.compile_ordered and not os.path.isfile(self.f_file_manager):
-      return True
+    if 'c' in self.compile_ordered:
+      if not os.path.isfile(self.c_file_manager) or os.path.isfile(self.c_obj_list_file):
+        return True
+    if 'f' in self.compile_ordered:
+      if not os.path.isfile(self.f_file_manager) or os.path.isfile(self.f_obj_list_file):
+        return True
+    return False
+    
+  def add_function_after_c(self, func:Callable, do_on_change = True, call_each_change=False):
+    '''
+      执行完c编译后，添加一个自定义函数来执行一些任务，比如自动生成c的f90接口
+      Args:
+        do_on_change: 文件变动时才调用
+        call_each_change: 对每个变动的文件，调用一次func(file)
+    '''
+    if callable(func):
+      self.funcs_after_c_build.append(custom_fun(func, do_on_change, call_each_change))
+    
+  def add_function_after_f(self, func:Callable, do_on_change = True, call_each_change=False):
+    '''
+      执行完fortran编译后，添加一个自定义函数来执行一些任务，比如自动生成c的f90接口
+      Args:
+        do_on_change: 文件变动时才调用
+        call_each_change: 对每个变动的文件，调用一次func(file)
+    '''
+    if callable(func):
+      self.funcs_after_f_build.append(custom_fun(func, do_on_change, call_each_change))
     
   def make(self):
     '''编译项目'''
+    if self.need_clear:
+      self.clear(self.with_exe)
+      return
+    
     if self.check_must_update_file() or self.need_update:
       self.update_source_files()
     
@@ -308,6 +370,9 @@ class compile_manager:
           self.c_link_files()
         else:
           self.c_pack_lib()
+        if len(self.funcs_after_c_build) > 0:
+          for f in self.funcs_after_c_build:
+            f.call_funcs(files)
       elif cpl == 'f':
         self.f_parser.gen_dependency_graph()
         files = self.f_parser.f_get_files_need_compile()
@@ -316,3 +381,33 @@ class compile_manager:
           self.f_link_files()
         else:
           self.f_pack_lib()
+        if len(self.funcs_after_f_build) > 0:
+          for f in self.funcs_after_f_build:
+            f.call_funcs(files)
+            
+  def clear(self, with_exe=False):
+    '''清理项目'''
+    if os.path.isfile(self.c_file_manager):
+      os.remove(self.c_file_manager)
+    if os.path.isfile(self.f_file_manager):
+      os.remove(self.f_file_manager)
+    typs = ['debug', 'release']
+    indirs = ['libs', 'mods', 'objs']
+    infiles = ['cobjs.txt', 'fobjs.txt']
+    for t in typs:
+      mid = os.path.join(self.config.project_build_dir, t)
+      for f in infiles:
+        f = os.path.join(mid, f)
+        if os.path.isfile(f):
+          os.remove(f)
+      for d in indirs:
+        dir = os.path.join(mid, d)
+        if os.path.isdir(dir):
+          shutil.rmtree(dir)
+      if with_exe:
+        dir = os.path.join(mid, 'bin')
+        if os.path.isdir(dir):
+          shutil.rmtree(dir)
+      
+    print('清理完成！')
+    
