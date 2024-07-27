@@ -34,6 +34,8 @@ python maker.py debug #以debug模式编译
 python maker.py release #以release模式编译
 python maker.py debug update #更新源文件列表后进行debug模式编译
 python maker.py release update #更新源文件列表后进行release模式编译
+python maker.py clear #删除中间文件
+python maker.py clear rmexe #删除中间文件和exe
 ```
 
 ## Advanced
